@@ -13,15 +13,15 @@ jobs:
       - run: docker build -t raj/react-test -f ./client/Dockerfile.dev ./client
       - run: docker run -e CI=true raj/react-test npm test
  
-      - run: docker build -t raj/multi-client ./client
-      - run: docker build -t raj/multi-nginx ./nginx
-      - run: docker build -t raj/multi-server ./server
-      - run: docker build -t raj/multi-worker ./worker
+      - run: docker build -t raj282001/multi-client ./client
+      - run: docker build -t raj282001/multi-nginx ./nginx
+      - run: docker build -t raj282001/multi-server ./server
+      - run: docker build -t raj282001/multi-worker ./worker
  
-      - run: docker push raj/multi-client
-      - run: docker push raj/multi-nginx
-      - run: docker push raj/multi-server
-      - run: docker push raj/multi-worker
+      - run: docker push raj282001/multi-client
+      - run: docker push raj282001/multi-nginx
+      - run: docker push raj282001/multi-server
+      - run: docker push raj282001/multi-worker
  
       # - name: Generate deployment package
       #   run: zip -r deploy.zip . -x '*.git*'
