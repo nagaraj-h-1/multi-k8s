@@ -1,40 +1,63 @@
-name: Deploy MultiDocker
+name: Deploy MultiK8s
 on:
   push:
     branches:
-      - main # check your repo, your default branch might be master!
+      - main
+ 
+env:
+  SHA: $(git rev-parse HEAD)
  
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-      - run: docker build -t raj/react-test -f ./client/Dockerfile.dev ./client
-      - run: docker run -e CI=true raj/react-test npm test
+      - uses: actions/checkout@v3
  
-      - run: docker build -t raj282001/multi-client ./client
-      - run: docker build -t raj282001/multi-nginx ./nginx
-      - run: docker build -t raj282001/multi-server ./server
-      - run: docker build -t raj282001/multi-worker ./worker
+      - name: Test
+        run: |-
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker build -t raj282001/react-test -f ./client/Dockerfile.dev ./client
+          docker run -e CI=true raj282001/react-test npm test
  
-      - run: docker push raj282001/multi-client
-      - run: docker push raj282001/multi-nginx
-      - run: docker push raj282001/multi-server
-      - run: docker push raj282001/multi-worker
-
- 
-      - name: Generate deployment package
-        run: zip -r deploy.zip . -x '*.git*'
- 
-      - name: Deploy to EB
-        uses: einaregilsson/beanstalk-deploy@v18
+      - name: Set Service Key
+        uses: 'google-github-actions/auth@v0'
         with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_KEY }}
-          application_name: multi-docker
-          environment_name: Multidocker-env
-          existing_bucket_name: elasticbeanstalk-ap-south-1-094096131178
-          region: ap-south-1
-          version_label: ${{ github.sha }}
-          deployment_package: deploy.zip
+          credentials_json: '${{ secrets.GKE_SA_KEY }}'
+ 
+      - name: Set Project
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: multi-k8s-378005
+ 
+      - name: Auth
+        run: |-
+          gcloud --quiet auth configure-docker
+ 
+      - name: Get Credentials
+        uses: google-github-actions/get-gke-credentials@v0
+        with:
+          cluster_name: multi-cluster
+          location: asia-south1-a
+ 
+      - name: Build
+        run: |-
+          docker build -t raj282001/multi-client -t raj282001/multi-client:${{ env.SHA }} -f ./client/Dockerfile ./client
+          docker build -t raj282001/multi-server -t raj282001/multi-server:${{ env.SHA }} -f ./server/Dockerfile ./server
+          docker build -t raj282001/multi-worker -t raj282001/multi-worker:${{ env.SHA }} -f ./worker/Dockerfile ./worker
+ 
+      - name: Push
+        run: |-
+          docker push raj282001/multi-client
+          docker push raj282001/multi-server
+          docker push raj282001/multi-worker
+ 
+          docker push raj282001/multi-client:${{ env.SHA }}
+          docker push raj282001/multi-server:${{ env.SHA }}
+          docker push raj282001/multi-worker:${{ env.SHA }}
+ 
+      - name: Apply
+        run: |-
+          kubectl apply -f k8s
+          kubectl set image deployments/server-deployment server=raj282001/multi-server:${{ env.SHA }}
+          kubectl set image deployments/client-deployment client=raj282001/multi-client:${{ env.SHA }}
+          kubectl set image deployments/worker-deployment worker=raj282001/multi-worker:${{ env.SHA }}
